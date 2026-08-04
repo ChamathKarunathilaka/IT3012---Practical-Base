@@ -26,6 +26,17 @@ class VisualGridHuntGame:
             if pos_tuple != (0, 0) and pos_tuple not in self.walls:
                 self.food_positions.add(pos_tuple)
 
+        # Generate toxic traps in safe cells that avoid start, walls, and food
+        self.toxic_traps = set()
+        available_positions = {
+            (x, y) for x in range(self.width) for y in range(self.height)
+            if (x, y) != (0, 0) and (x, y) not in self.walls and (x, y) not in self.food_positions
+        }
+        while len(self.toxic_traps) < min(4, len(available_positions)):
+            trap_pos = random.choice(tuple(available_positions))
+            self.toxic_traps.add(trap_pos)
+            available_positions.remove(trap_pos)
+
         # Generate adversarial opponents
         self.opponents = []
         while len(self.opponents) < num_opponents:
@@ -40,11 +51,13 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
+        agent_pos_tuple = tuple(self.agent_pos)
         return {
             'agent_pos': list(self.agent_pos),
             'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
+            'smells_food': agent_pos_tuple in self.food_positions,
+            'smells_toxin': agent_pos_tuple in self.toxic_traps,
+            'hit_wall': agent_pos_tuple in self.walls,
             'collision': self.collision,
             'score': self.score,
             'remaining_food': len(self.food_positions)
@@ -67,6 +80,8 @@ class VisualGridHuntGame:
             self.score -= 5
         else:
             self.agent_pos = new_pos
+            if tuple(self.agent_pos) in self.toxic_traps:
+                self.score -= 15
 
         tuple_pos = tuple(self.agent_pos)
         if tuple_pos in self.food_positions:
@@ -145,6 +160,17 @@ class GridGameGUI:
             y1 = (self.env.height - 1 - fy) * self.cell_size + offset
             self.canvas.create_oval(x1, y1, x1 + self.cell_size * 0.5, y1 + self.cell_size * 0.5, fill="#f59e0b",
                                     outline="#d97706")
+
+        for tx, ty in self.env.toxic_traps:
+            cx = tx * self.cell_size + self.cell_size * 0.5
+            cy = (self.env.height - 1 - ty) * self.cell_size + self.cell_size * 0.5
+            self.canvas.create_polygon(
+                cx, cy - self.cell_size * 0.25,
+                cx + self.cell_size * 0.25, cy,
+                cx, cy + self.cell_size * 0.25,
+                cx - self.cell_size * 0.25, cy,
+                fill="#7c3aed", outline="#5b21b6"
+            )
 
         for ox, oy in self.env.opponents:
             offset = self.cell_size * 0.2
