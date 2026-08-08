@@ -21,97 +21,48 @@ class SimpleReflexAgent:
         if percept.get('food_here'):
             return 'Suck'
         if percept.get('wall_ahead'):
-            return 'Left'
+            # Turn in-place when a wall is detected ahead (no internal memory)
+            return 'TurnLeft'
         return 'Forward'
 
 
 class ModelBasedAgent:
-    """Reflex agent with internal state for escaping local loops."""
+    """Simple model-based agent that records repeated percepts and breaks loops.
+
+    This implementation intentionally keeps a lightweight memory (no global coords)
+    suitable for partially observable worlds: it tracks the last percept and the
+    number of times the same percept was seen consecutively and switches actions
+    when stuck.
+    """
 
     def __init__(self):
-        self.position = (0, 0)
-        self.facing = 'Up'
-        self.visited_cells = {self.position}
-        self.last_action = None
         self.last_percept = None
-        self.wall_block_count = 0
-
-    @staticmethod
-    def _turn_left(facing: str) -> str:
-        order = ['Up', 'Left', 'Down', 'Right']
-        return order[(order.index(facing) + 1) % 4]
-
-    @staticmethod
-    def _turn_right(facing: str) -> str:
-        order = ['Up', 'Right', 'Down', 'Left']
-        return order[(order.index(facing) + 1) % 4]
-
-    @staticmethod
-    def _move(position, facing):
-        x, y = position
-        if facing == 'Up':
-            return x, y + 1
-        if facing == 'Down':
-            return x, y - 1
-        if facing == 'Left':
-            return x - 1, y
-        return x + 1, y
-
-    def _relative_direction(self, turn: str) -> str:
-        if turn == 'left':
-            return self._turn_left(self.facing)
-        if turn == 'right':
-            return self._turn_right(self.facing)
-        return self.facing
-
-    def _update_state(self, percept: dict) -> None:
-        if self.last_action == 'Forward' and self.last_percept and not self.last_percept.get('wall_ahead'):
-            self.position = self._move(self.position, self.facing)
-        elif self.last_action == 'TurnLeft':
-            self.facing = self._turn_left(self.facing)
-        elif self.last_action == 'TurnRight':
-            self.facing = self._turn_right(self.facing)
-
-        self.visited_cells.add(self.position)
-        self.last_percept = dict(percept)
-        if percept.get('wall_ahead'):
-            self.wall_block_count += 1
-        else:
-            self.wall_block_count = 0
+        self.last_action = None
+        self.repeat_count = 0
 
     def sense_and_act(self, percept: dict) -> str:
-        self._update_state(percept)
+        # Update repeat_count for identical percepts (detect being stuck)
+        if self.last_percept is not None and percept == self.last_percept:
+            self.repeat_count += 1
+        else:
+            self.repeat_count = 0
 
         if percept.get('food_here'):
             action = 'Suck'
         elif percept.get('wall_ahead'):
-            left_cell = self._move(self.position, self._relative_direction('left'))
-            right_cell = self._move(self.position, self._relative_direction('right'))
-
-            if self.last_action in ('TurnLeft', 'TurnRight') and self.wall_block_count > 0:
-                action = 'TurnRight' if self.last_action == 'TurnLeft' else 'TurnLeft'
-            elif right_cell not in self.visited_cells:
-                action = 'TurnRight'
-            elif left_cell not in self.visited_cells:
-                action = 'TurnLeft'
-            elif self.wall_block_count % 2 == 0:
-                action = 'TurnLeft'
+            # If we've seen the same wall percept repeatedly, try to change behaviour
+            if self.repeat_count >= 1:
+                # Alternate between turning and attempting to move forward
+                if self.last_action == 'TurnLeft':
+                    action = 'Forward'
+                else:
+                    action = 'TurnLeft'
             else:
-                action = 'TurnRight'
+                action = 'TurnLeft'
         else:
-            forward_cell = self._move(self.position, self.facing)
-            left_cell = self._move(self.position, self._relative_direction('left'))
-            right_cell = self._move(self.position, self._relative_direction('right'))
+            action = 'Forward'
 
-            if forward_cell not in self.visited_cells:
-                action = 'Forward'
-            elif left_cell not in self.visited_cells:
-                action = 'TurnLeft'
-            elif right_cell not in self.visited_cells:
-                action = 'TurnRight'
-            else:
-                action = 'Forward'
-
+        self.last_percept = dict(percept)
         self.last_action = action
         return action
 

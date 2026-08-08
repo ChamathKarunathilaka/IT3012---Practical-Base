@@ -241,8 +241,43 @@ class GridGameGUI:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    # Try a larger grid size like 12x12 with 15 food and 3 opponents!
-    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
-    app.agent = ModelBasedAgent()
-    root.mainloop()
+    import sys
+
+    # Command-line options:
+    #   python visual_grid_game.py simple      -> run GUI with SimpleReflexAgent
+    #   python visual_grid_game.py model       -> run GUI with ModelBasedAgent (default)
+    #   python visual_grid_game.py --headless simple -> run headless simulation without GUI
+
+    agent_choice = 'model'
+    headless = False
+    args = [a.lower() for a in sys.argv[1:]]
+    if args:
+        if '--headless' in args:
+            headless = True
+            # pick next arg as agent type if present
+            for a in args:
+                if a in ('simple', 'model'):
+                    agent_choice = a
+        else:
+            for a in args:
+                if a in ('simple', 'model'):
+                    agent_choice = a
+
+    AgentClass = SimpleReflexAgent if agent_choice == 'simple' else ModelBasedAgent
+
+    if headless:
+        env = VisualGridHuntGame(width=12, height=12, num_food=8, num_opponents=0)
+        agent = AgentClass()
+        print(f"Headless run — Agent: {agent_choice}")
+        while not env.is_done():
+            percept = env.get_percept()
+            action = agent.sense_and_act(percept)
+            print(f"Step {env.steps}: Percept={percept} -> Action={action} | Pos={tuple(env.agent_pos)} Facing={env.agent_facing}")
+            env.execute_action(action)
+        print(f"Done. Score={env.score} Steps={env.steps} Collision={env.collision}")
+    else:
+        root = tk.Tk()
+        # Try a larger grid size like 12x12 with 15 food and 3 opponents!
+        app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
+        app.agent = AgentClass()
+        root.mainloop()
