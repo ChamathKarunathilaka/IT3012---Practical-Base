@@ -1,4 +1,5 @@
 # agent.py
+import heapq
 import random
 from collections import deque
 
@@ -21,8 +22,7 @@ class SimpleReflexAgent:
         if percept.get('food_here'):
             return 'Suck'
         if percept.get('wall_ahead'):
-            # Turn in-place when a wall is detected ahead (no internal memory)
-            return 'TurnLeft'
+            return 'Left'
         return 'Forward'
 
 
@@ -68,33 +68,117 @@ class ModelBasedAgent:
 
 
 class SearchAgent:
-    """Breadth-first search agent for the static grid tests."""
+    """Graph-search agent that plans a route to the nearest food pellet."""
 
-    def bfs_search(self, start_pos, goal_pos, walls, grid_size):
-        width, height = grid_size
-        blocked = set(walls)
-        frontier = deque([(start_pos, [])])
-        visited = {start_pos}
-        moves = [
+    def __init__(self):
+        self.plan = []
+        self.active_algo = 'BFS'
+
+    @staticmethod
+    def _moves():
+        return [
             ('Up', (0, 1)),
             ('Down', (0, -1)),
             ('Left', (-1, 0)),
             ('Right', (1, 0)),
         ]
 
+    def bfs_search(self, start_pos, goal_pos, walls, grid_size):
+        width, height = grid_size
+        blocked = set(walls)
+        frontier = deque([(start_pos, [])])
+        reached = {start_pos}
+
         while frontier:
             position, path = frontier.popleft()
             if position == goal_pos:
                 return path
 
-            for action, (dx, dy) in moves:
+            for action, (dx, dy) in self._moves():
                 next_pos = (position[0] + dx, position[1] + dy)
                 if not (0 <= next_pos[0] < width and 0 <= next_pos[1] < height):
                     continue
-                if next_pos in blocked or next_pos in visited:
+                if next_pos in blocked or next_pos in reached:
                     continue
 
-                visited.add(next_pos)
+                reached.add(next_pos)
                 frontier.append((next_pos, path + [action]))
 
         return None
+
+    def dfs_search(self, start_pos, goal_pos, walls, grid_size):
+        width, height = grid_size
+        blocked = set(walls)
+        frontier = [(start_pos, [])]
+        reached = {start_pos}
+
+        while frontier:
+            position, path = frontier.pop()
+            if position == goal_pos:
+                return path
+
+            for action, (dx, dy) in reversed(self._moves()):
+                next_pos = (position[0] + dx, position[1] + dy)
+                if not (0 <= next_pos[0] < width and 0 <= next_pos[1] < height):
+                    continue
+                if next_pos in blocked or next_pos in reached:
+                    continue
+
+                reached.add(next_pos)
+                frontier.append((next_pos, path + [action]))
+
+        return None
+
+    def ucs_search(self, start_pos, goal_pos, walls, grid_size):
+        width, height = grid_size
+        blocked = set(walls)
+        frontier = [(0, start_pos, [])]
+        reached = {start_pos: 0}
+
+        while frontier:
+            cost, position, path = heapq.heappop(frontier)
+            if position == goal_pos:
+                return path
+
+            for action, (dx, dy) in self._moves():
+                next_pos = (position[0] + dx, position[1] + dy)
+                if not (0 <= next_pos[0] < width and 0 <= next_pos[1] < height):
+                    continue
+                if next_pos in blocked:
+                    continue
+
+                new_cost = cost + 1
+                previous_best = reached.get(next_pos)
+                if previous_best is not None and new_cost >= previous_best:
+                    continue
+
+                reached[next_pos] = new_cost
+                heapq.heappush(frontier, (new_cost, next_pos, path + [action]))
+
+        return None
+
+    def sense_and_act(self, percept: dict) -> str:
+        if not self.plan:
+            start_pos = tuple(percept.get('agent_pos', (0, 0)))
+            food_positions = percept.get('all_food', [])
+            walls = percept.get('walls', [])
+            grid_size = percept.get('grid_size', (0, 0))
+
+            if food_positions:
+                goal = min(food_positions, key=lambda pos: abs(pos[0] - start_pos[0]) + abs(pos[1] - start_pos[1]))
+                algo = self.active_algo.lower()
+                if algo == 'bfs':
+                    self.plan = self.bfs_search(start_pos, goal, walls, grid_size) or []
+                elif algo == 'dfs':
+                    self.plan = self.dfs_search(start_pos, goal, walls, grid_size) or []
+                elif algo == 'ucs':
+                    self.plan = self.ucs_search(start_pos, goal, walls, grid_size) or []
+                else:
+                    self.plan = self.bfs_search(start_pos, goal, walls, grid_size) or []
+
+        if self.plan:
+            return self.plan.pop(0)
+
+        if percept.get('food_here'):
+            return 'Suck'
+        return 'Forward'

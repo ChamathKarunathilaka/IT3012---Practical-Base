@@ -77,8 +77,12 @@ class VisualGridHuntGame:
     def get_percept(self) -> dict:
         front_cell = self._move_from(tuple(self.agent_pos), self.agent_facing)
         return {
+            'agent_pos': list(self.agent_pos),
             'wall_ahead': not (0 <= front_cell[0] < self.width and 0 <= front_cell[1] < self.height) or front_cell in self.walls,
             'food_here': tuple(self.agent_pos) in self.food_positions,
+            'grid_size': (self.width, self.height),
+            'walls': list(self.walls),
+            'all_food': list(self.food_positions),
         }
 
     def execute_action(self, action: str):
