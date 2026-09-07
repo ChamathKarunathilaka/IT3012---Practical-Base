@@ -2,7 +2,7 @@
 import random
 import tkinter as tk
 
-from agent import ModelBasedAgent, SimpleReflexAgent
+from agent import ModelBasedAgent, SearchAgent, SimpleReflexAgent
 
 
 class VisualGridHuntGame:
@@ -154,6 +154,10 @@ class GridGameGUI:
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
 
+        # Step 1.3 - inject the informed-search agent instead of ModelBasedAgent
+        self.agent = SearchAgent()
+        self.agent.active_algo = 'AStar'
+
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
         self.cell_size = max(20, min(max_canvas_dim // self.env.width, max_canvas_dim // self.env.height))
@@ -225,7 +229,7 @@ class GridGameGUI:
 
     def run_loop(self):
         self.btn.config(state="disabled")
-        agent = getattr(self, 'agent', ModelBasedAgent())
+        agent = getattr(self, 'agent', SearchAgent())
 
         def step():
             if not self.env.is_done():
@@ -249,29 +253,32 @@ if __name__ == "__main__":
 
     # Command-line options:
     #   python visual_grid_game.py simple      -> run GUI with SimpleReflexAgent
-    #   python visual_grid_game.py model       -> run GUI with ModelBasedAgent (default)
-    #   python visual_grid_game.py --headless simple -> run headless simulation without GUI
+    #   python visual_grid_game.py model       -> run GUI with ModelBasedAgent
+    #   python visual_grid_game.py search      -> run GUI with SearchAgent / A* (default)
+    #   python visual_grid_game.py --headless search -> run headless simulation without GUI
 
-    agent_choice = 'model'
+    agent_choice = 'search'
     headless = False
     args = [a.lower() for a in sys.argv[1:]]
     if args:
         if '--headless' in args:
             headless = True
-            # pick next arg as agent type if present
-            for a in args:
-                if a in ('simple', 'model'):
-                    agent_choice = a
-        else:
-            for a in args:
-                if a in ('simple', 'model'):
-                    agent_choice = a
+        for a in args:
+            if a in ('simple', 'model', 'search', 'astar'):
+                agent_choice = a
 
-    AgentClass = SimpleReflexAgent if agent_choice == 'simple' else ModelBasedAgent
+    def make_agent(choice):
+        if choice == 'simple':
+            return SimpleReflexAgent()
+        if choice == 'model':
+            return ModelBasedAgent()
+        agent = SearchAgent()
+        agent.active_algo = 'AStar'
+        return agent
 
     if headless:
         env = VisualGridHuntGame(width=12, height=12, num_food=8, num_opponents=0)
-        agent = AgentClass()
+        agent = make_agent(agent_choice)
         print(f"Headless run — Agent: {agent_choice}")
         while not env.is_done():
             percept = env.get_percept()
@@ -283,5 +290,5 @@ if __name__ == "__main__":
         root = tk.Tk()
         # Try a larger grid size like 12x12 with 15 food and 3 opponents!
         app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
-        app.agent = AgentClass()
+        app.agent = make_agent(agent_choice)
         root.mainloop()
